@@ -31,6 +31,8 @@
 		SET_KEYBOARD_NOTIFIER_BLOCK(nb, NULL, -1)
 
 static struct keyboard_notifier_struct keyboard_notifier;
+static int keyboard_notifier_init(void);
+static int keyboard_notifier_init_done = 0; 
 
 static void __set_noti_cxt(int attach)
 {
@@ -43,6 +45,8 @@ int keyboard_notifier_register(struct notifier_block *nb, notifier_fn_t notifier
 	int ret = 0;
 
 	pr_info("%s: listener=%d register\n", __func__, listener);
+	if(!keyboard_notifier_init_done)
+		keyboard_notifier_init();
 
 	SET_KEYBOARD_NOTIFIER_BLOCK(nb, notifier, listener);
 	ret = blocking_notifier_chain_register(&(keyboard_notifier.notifier_call_chain), nb);
@@ -115,10 +119,16 @@ void keyboard_notifier_detach(void)
 	keyboard_notifier_notify();
 }
 
-static int __init keyboard_notifier_init(void)
+static int keyboard_notifier_init(void)
 {
 	int ret = 0;
+	
+	if (keyboard_notifier_init_done) {
+		pr_info("%s already registered\n", __func__);
+		return ret;
+	}
 
+	keyboard_notifier_init_done = 1;
 	pr_info("%s\n", __func__);
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&(keyboard_notifier.notifier_call_chain));
