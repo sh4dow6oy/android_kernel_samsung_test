@@ -169,8 +169,6 @@ enum {
 	EVENT_DC_ERR = 0,
 	EVENT_TA_OCP_DET,
 	EVENT_TA_OCP_ON,
-	EVENT_OVP_POWER,
-	EVENT_OVP_SIGNAL,
 	EVENT_DATA_MAX,
 };
 
@@ -210,11 +208,6 @@ struct cisd {
 	unsigned int ab_vbat_max_count;
 	unsigned int ab_vbat_check_count;
 	unsigned int max_voltage_thr;
-
-	unsigned int gpio_ovp_power;
-	unsigned int irq_ovp_power;
-	unsigned int gpio_ovp_signal;
-	unsigned int irq_ovp_signal;
 
 	/* Big Data Field */
 	int data[CISD_DATA_MAX_PER_DAY];

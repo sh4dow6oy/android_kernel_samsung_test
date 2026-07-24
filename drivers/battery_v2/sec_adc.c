@@ -12,8 +12,6 @@
 
 #include "include/sec_adc.h"
 
-#define DEBUG
-
 struct adc_list {
 	const char *name;
 	struct iio_channel *channel;
@@ -56,7 +54,7 @@ static void sec_bat_adc_ap_init(struct platform_device *pdev,
 	}
 
 	for (i  = 0; i < SEC_BAT_ADC_CHANNEL_NUM; i++)
-		pr_info("%s %s - %s\n",
+		pr_debug("%s %s - %s\n",
 			__func__, batt_adc_list[i].name, batt_adc_list[i].is_used ? "used" : "not used");
 }
 
@@ -384,15 +382,13 @@ int sec_bat_convert_adc_to_temp(unsigned int adc_ch, int temp_adc)
 	unsigned int temp_adc_table_size = 0;
 
 	if(!local_battery) {
-		pr_info("%s: battery data is not ready yet\n", __func__);
+		pr_debug("%s: battery data is not ready yet\n", __func__);
 		goto temp_to_adc_goto;
 	}
 
-	if (adc_ch == 0x4d &&
-		local_battery->pdata->usb_thermal_source == SEC_BATTERY_THERMAL_SOURCE_ADC)
+	if (adc_ch == 0x4d)
 		channel = SEC_BAT_ADC_CHANNEL_USB_TEMP;
-	else if (adc_ch == 0x52 &&
-		local_battery->pdata->thermal_source == SEC_BATTERY_THERMAL_SOURCE_ADC)
+	else if (adc_ch == 0x52)
 		channel = SEC_BAT_ADC_CHANNEL_TEMP;
 	else
 		goto temp_to_adc_goto;
@@ -457,15 +453,13 @@ int sec_bat_get_thr_voltage(unsigned int adc_ch, int temp)
 	unsigned int temp_adc_table_size = 0;
 
 	if(!local_battery) {
-		pr_info("%s: battery data is not ready yet\n", __func__);
+		pr_debug("%s: battery data is not ready yet\n", __func__);
 		goto get_thr_voltage_goto;
 	}
 
-	if (adc_ch == 0x4d &&
-		local_battery->pdata->usb_thermal_source == SEC_BATTERY_THERMAL_SOURCE_ADC)
+	if (adc_ch == 0x4d)
 		channel = SEC_BAT_ADC_CHANNEL_USB_TEMP;
-	else if (adc_ch == 0x52 &&
-		local_battery->pdata->thermal_source == SEC_BATTERY_THERMAL_SOURCE_ADC)
+	else if (adc_ch == 0x52)
 		channel = SEC_BAT_ADC_CHANNEL_TEMP;
 	else
 		goto get_thr_voltage_goto;
@@ -543,17 +537,12 @@ int sec_bat_get_direct_chg_temp_adc(struct sec_battery_info *battery,
 			int adc_data, int count)
 {
 	int temp = 0;
-	int temp_adc = 0;
+	int temp_adc;
 	int low = 0;
 	int high = 0;
 	int mid = 0;
 	const sec_bat_adc_table_data_t *temp_adc_table = {0 , };
 	unsigned int temp_adc_table_size = 0;
-
-	if (battery->pdata->dchg_temp_check_type == SEC_BATTERY_TEMP_CHECK_FAKE) {
-		temp = 300;
-		goto direct_chg_temp_goto;
-	}
 
 	temp_adc = adc_data;
 	if (temp_adc < 0)
