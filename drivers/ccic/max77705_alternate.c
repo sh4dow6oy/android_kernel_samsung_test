@@ -21,16 +21,17 @@
 #include <linux/interrupt.h>
 #include <linux/mod_devicetable.h>
 #include <linux/mfd/max77705-private.h>
+#include <linux/ccic/max77705_usbc.h>
+#include <linux/ccic/max77705_alternate.h>
 #include <linux/completion.h>
+
 #if defined(CONFIG_USB_HOST_NOTIFY)
 #include <linux/usb_notify.h>
 #endif
 #if defined(CONFIG_CCIC_NOTIFIER)
-#include <linux/ccic/ccic_core.h>
 #include <linux/ccic/ccic_notifier.h>
+#include <linux/ccic/ccic_core.h>
 #endif
-#include <linux/ccic/max77705_usbc.h>
-#include <linux/ccic/max77705_alternate.h>
 
 #define UVDM_DEBUG (1)
 #define SEC_UVDM_ALIGN		(4)
@@ -187,50 +188,10 @@ static uint8_t DP_Pin_Assignment_Data[7] = {
 	DP_PIN_ASSIGNMENT_F,
 };
 
-bool max77705_check_hmd_dev(struct max77705_usbc_platform_data *usbpd_data)
-{
-	struct max77705_hmd_power_dev *hmd_list;
-	int i;
-	bool ret = false;
-	uint16_t vid = usbpd_data->Vendor_ID;
-	uint16_t pid = usbpd_data->Product_ID;
-
-	if (!vid && !pid)
-		return ret;
-	hmd_list = usbpd_data->hmd_list;
-	if (!hmd_list) {
-		msg_maxim("hmd_list is null!");
-		return ret;
-	}
-	for (i = 0; i < MAX_NUM_HMD; i++) {
-		if (strlen(hmd_list[i].hmd_name) > 0)
-			msg_maxim("%s,0x%04x,0x%04x",
-				hmd_list[i].hmd_name,
-				hmd_list[i].vid,
-				hmd_list[i].pid);
-	}
-	for (i = 0; i < MAX_NUM_HMD; i++) {
-		if (hmd_list[i].hmd_name[0]) {
-			if (vid == hmd_list[i].vid && pid == hmd_list[i].pid) {
-				msg_maxim("hmd found %s,0x%04x,0x%04x",
-					hmd_list[i].hmd_name,
-					hmd_list[i].vid,
-					hmd_list[i].pid);
-				ret = true;
-				break;
-			}
-			continue;
-		}
-		break;
-	}
-
-	return ret;
-}
-
 int max77705_process_check_accessory(void *data)
 {
 	struct max77705_usbc_platform_data *usbpd_data = data;
-#if defined(CONFIG_USB_HW_PARAM) || IS_ENABLED(CONFIG_USB_NOTIFY_LAYER)
+#if defined(CONFIG_USB_HW_PARAM)
 	struct otg_notify *o_notify = get_otg_notify();
 #endif
 	uint16_t vid = usbpd_data->Vendor_ID;
@@ -303,16 +264,6 @@ int max77705_process_check_accessory(void *data)
 		ccic_send_dock_intent(acc_type);
 
 	ccic_send_dock_uevent(vid, pid, acc_type);
-
-	mutex_lock(&usbpd_data->hmd_power_lock);
-	if (max77705_check_hmd_dev(usbpd_data)) {
-#if IS_ENABLED(CONFIG_USB_NOTIFY_LAYER)
-		if (o_notify)
-			send_otg_notify(o_notify, NOTIFY_EVENT_HMD_EXT_CURRENT, 1);
-#endif
-	}
-	mutex_unlock(&usbpd_data->hmd_power_lock);
-	
 	return 1;
 }
 
@@ -411,30 +362,16 @@ void max77705_vdm_process_set_Dex_enter_mode_req(void *data)
 static int max77705_vdm_process_discover_svids(void *data, char *vdm_data, int len)
 {
 	struct max77705_usbc_platform_data *usbpd_data = data;
-	int timeleft = 0, i = 0;
+	int timeleft = 0;
 #if defined(CONFIG_USB_HOST_NOTIFY)
-	struct otg_notify *o_notify = get_otg_notify();
+		struct otg_notify *o_notify = get_otg_notify();
 #endif
-	uint16_t svid = 0;
-	DIS_MODE_DP_CAPA_Type *pDP_DIS_MODE = (DIS_MODE_DP_CAPA_Type *)&vdm_data[0];
-	/* Number_of_obj has msg_header & vdm_header, each vdo has 2 svids */ 
-	/* This logic can work until Max VDOs 12 */
-	int num_of_vdos = (pDP_DIS_MODE->MSG_HEADER.BITS.Number_of_obj - 2) * 2;
 	UND_VDO1_Type  *DATA_MSG_VDO1 = (UND_VDO1_Type  *)&vdm_data[8];
-	usbpd_data->SVID_DP = 0;
+
 	usbpd_data->SVID_0 = DATA_MSG_VDO1->BITS.SVID_0;
 	usbpd_data->SVID_1 = DATA_MSG_VDO1->BITS.SVID_1;
 
-	for (i = 0; i < num_of_vdos; i++) {
-		memcpy(&svid, &vdm_data[8 + i * 2], 2);
-		if (svid == TypeC_DP_SUPPORT) {
-			msg_maxim("svid_%d : 0x%X", i, svid);
-			usbpd_data->SVID_DP = svid;
-			break;
-		}
-	}
-
-	if (usbpd_data->SVID_DP == TypeC_DP_SUPPORT) {
+	if (usbpd_data->SVID_0 == TypeC_DP_SUPPORT) {
 		timeleft = wait_event_interruptible_timeout(usbpd_data->host_turn_on_wait_q,
 				!usbpd_data->detach_done_wait, (usbpd_data->host_turn_on_wait_time)*HZ);
 		msg_maxim("%s detach_done_wait = %d\n", __func__, timeleft);
@@ -465,8 +402,8 @@ static int max77705_vdm_process_discover_svids(void *data, char *vdm_data, int l
 			CCIC_NOTIFY_DEV_USB_DP, CCIC_NOTIFY_ID_USB_DP,
 			usbpd_data->dp_is_connect /*attach*/, usbpd_data->dp_hs_connect, 0);
 	}
-	msg_maxim("SVID_DP : 0x%X, SVID_0 : 0x%X, SVID_1 : 0x%X",
-			usbpd_data->SVID_DP, usbpd_data->SVID_0, usbpd_data->SVID_1);
+	msg_maxim("SVID_0 : 0x%X, SVID_1 : 0x%X",
+			usbpd_data->SVID_0, usbpd_data->SVID_1);
 	return 0;
 }
 
@@ -477,7 +414,7 @@ static int max77705_vdm_process_discover_mode(void *data, char *vdm_data, int le
 	UND_DATA_MSG_VDM_HEADER_Type *DATA_MSG_VDM = (UND_DATA_MSG_VDM_HEADER_Type *)&vdm_data[4];
 
 	msg_maxim("vendor_id = 0x%04x , svid_1 = 0x%04x", DATA_MSG_VDM->BITS.Standard_Vendor_ID, usbpd_data->SVID_1);
-	if (DATA_MSG_VDM->BITS.Standard_Vendor_ID == TypeC_DP_SUPPORT && usbpd_data->SVID_DP == TypeC_DP_SUPPORT) {
+	if (DATA_MSG_VDM->BITS.Standard_Vendor_ID == TypeC_DP_SUPPORT && usbpd_data->SVID_0 == TypeC_DP_SUPPORT) {
 		/*  pDP_DIS_MODE->DATA_MSG_MODE_VDO_DP.BITS. */
 		msg_maxim("pDP_DIS_MODE->MSG_HEADER.DATA = 0x%08X", pDP_DIS_MODE->MSG_HEADER.DATA);
 		msg_maxim("pDP_DIS_MODE->DATA_MSG_VDM_HEADER.DATA = 0x%08X", pDP_DIS_MODE->DATA_MSG_VDM_HEADER.DATA);
@@ -522,7 +459,7 @@ static int max77705_vdm_process_discover_mode(void *data, char *vdm_data, int le
 		if (usbpd_data->send_enter_mode_req == 0) {
 			msg_maxim("dex: second enter mode request");
 			usbpd_data->send_enter_mode_req = 1;
-			max77705_vdm_process_set_Dex_enter_mode_req(usbpd_data);
+		max77705_vdm_process_set_Dex_enter_mode_req(usbpd_data);
 		}
 	} else {
 		max77705_vdm_process_set_DP_enter_mode_req(usbpd_data);
@@ -607,7 +544,7 @@ static int max77705_vdm_dp_status_update(void *data, char *vdm_data, int len)
 	DP_STATUS_UPDATE_Type *DP_STATUS;
 	uint8_t W_DATA = 0x0;
 
-	if (usbpd_data->SVID_DP == TypeC_DP_SUPPORT) {
+	if (usbpd_data->SVID_0 == TypeC_DP_SUPPORT) {
 		DP_STATUS = (DP_STATUS_UPDATE_Type *)&vdm_data[0];
 
 		msg_maxim("DP_STATUS_UPDATE = 0x%08X", DP_STATUS->DATA_DP_STATUS_UPDATE.DATA);
@@ -666,7 +603,7 @@ static int max77705_vdm_dp_attention(void *data, char *vdm_data, int len)
 	DIS_ATTENTION_MESSAGE_DP_STATUS_Type *DP_ATTENTION;
 	uint8_t W_DATA = 0;
 
-	if (usbpd_data->SVID_DP == TypeC_DP_SUPPORT) {
+	if (usbpd_data->SVID_0 == TypeC_DP_SUPPORT) {
 		DP_ATTENTION = (DIS_ATTENTION_MESSAGE_DP_STATUS_Type *)&vdm_data[0];
 
 		msg_maxim("%s DP_ATTENTION = 0x%08X\n", __func__,
@@ -715,7 +652,7 @@ static int max77705_vdm_dp_configure(void *data, char *vdm_data, int len)
 	UND_DATA_MSG_VDM_HEADER_Type *DATA_MSG_VDM = (UND_DATA_MSG_VDM_HEADER_Type *)&vdm_data[4];
 
 	msg_maxim("vendor_id = 0x%04x , svid_1 = 0x%04x", DATA_MSG_VDM->BITS.Standard_Vendor_ID, usbpd_data->SVID_1);
-	if (usbpd_data->SVID_DP == TypeC_DP_SUPPORT) {
+	if (usbpd_data->SVID_0 == TypeC_DP_SUPPORT) {
 		max77705_ccic_event_work(usbpd_data, CCIC_NOTIFY_DEV_DP,
 			CCIC_NOTIFY_ID_DP_LINK_CONF, usbpd_data->dp_selected_pin, 0, 0);
 	}
@@ -1079,9 +1016,6 @@ void max77705_acc_detach_check(struct work_struct *wk)
 		container_of(wk, struct delayed_work, work);
 	struct max77705_usbc_platform_data *usbpd_data =
 		container_of(delay_work, struct max77705_usbc_platform_data, acc_detach_work);
-#if IS_ENABLED(CONFIG_USB_NOTIFY_LAYER)
-	struct otg_notify *o_notify = get_otg_notify();
-#endif
 
 	pr_info("%s : pd_state : %d, acc_type : %d\n", __func__,
 		usbpd_data->pd_state, usbpd_data->acc_type);
@@ -1096,10 +1030,6 @@ void max77705_acc_detach_check(struct work_struct *wk)
 			usbpd_data->Vendor_ID = 0;
 			usbpd_data->Product_ID = 0;
 			usbpd_data->send_enter_mode_req = 0;
-#if IS_ENABLED(CONFIG_USB_NOTIFY_LAYER)
-			if (o_notify)
-				send_otg_notify(o_notify, NOTIFY_EVENT_HMD_EXT_CURRENT, 0);
-#endif
 		}
 	}
 }
@@ -1123,7 +1053,7 @@ void max77705_set_usb_phy_completion(int kind)
 
 	usbpd_data = g_usbc_data;
 
-	if (!usbpd_data)
+	if (!usbpd_data || !usbpd_data->max77705 || !usbpd_data->max77705->cc_booting_complete)
 		return;
 
 	if (kind == 0) {
@@ -1186,7 +1116,7 @@ void max77705_set_enable_alternate_mode(int mode)
 
 	msg_maxim("is_first_booting  : %x mode %x",
 			usbpd_data->is_first_booting, mode);
-#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+#if 0
 	store_usblog_notify(NOTIFY_ALTERNATEMODE, (void *)&mode, NULL);
 #endif
 	usbpd_data->set_altmode = mode;
@@ -1200,6 +1130,7 @@ void max77705_set_enable_alternate_mode(int mode)
 		msg_maxim("mode is invalid!");
 		return;
 	}
+
 #ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION					
 	if ((mode & ALTERNATE_MODE_STOP)) {
 		max77705_vdm_process_set_samsung_alternate_mode(usbpd_data,
@@ -1208,7 +1139,7 @@ void max77705_set_enable_alternate_mode(int mode)
 	} else if (mode & ALTERNATE_MODE_RESET) {
 #else
 	if (mode & ALTERNATE_MODE_RESET) {
-#endif
+#endif		
 		msg_maxim("mode is reset! check_is_driver_loaded=%d, prev_alternate_mode=%d",
 			check_is_driver_loaded, prev_alternate_mode);
 		if (check_is_driver_loaded &&
@@ -1294,7 +1225,7 @@ void max77705_set_enable_alternate_mode(int mode)
 #ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
 					max77705_vdm_process_set_samsung_alternate_mode(usbpd_data,
 						MAXIM_ENABLE_ALTERNATE_SRCCAP);
-#endif
+#endif					
 					msg_maxim("[ON BOOTING TIME] alternate mode is stopped!");
 				}
 				break;
@@ -1510,9 +1441,6 @@ static int max77705_send_sec_unstructured_short_vdm_message(void *data, void *bu
 	/* Message Type Definition */
 	uint8_t received_data = 0;
 	int time_left;
-#ifdef CONFIG_USB_NOTIFY_PROC_LOG
-	int event;
-#endif
 
 	if ((buf == NULL) || size <= 0) {
 		msg_maxim("given data is not valid !");
@@ -1536,7 +1464,7 @@ static int max77705_send_sec_unstructured_short_vdm_message(void *data, void *bu
 	usbpd_data->uvdm_error = 0;
 	max77705_send_vdm_write_message(SendMSG);
 
-	if (check_is_wait_ack_accessroy(usbpd_data->Vendor_ID, usbpd_data->Product_ID, usbpd_data->SVID_DP)) {
+	if (check_is_wait_ack_accessroy(usbpd_data->Vendor_ID, usbpd_data->Product_ID, usbpd_data->SVID_0)) {
 		reinit_completion(&usbpd_data->uvdm_longpacket_out_wait);
 		/* Wait Response*/
 		time_left =
@@ -1544,10 +1472,6 @@ static int max77705_send_sec_unstructured_short_vdm_message(void *data, void *bu
 							  msecs_to_jiffies(SAMSUNGUVDM_WAIT_MS));
 		if (time_left <= 0) {
 			usbpd_data->is_in_first_sec_uvdm_req = false;
-#ifdef CONFIG_USB_NOTIFY_PROC_LOG
-			event = NOTIFY_EXTRA_UVDM_TIMEOUT;
-			store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
-#endif
 			return -ETIME;
 		}
 		if (usbpd_data->uvdm_error) {
@@ -1574,9 +1498,6 @@ static int max77705_send_sec_unstructured_long_vdm_message(void *data, void *buf
 	int time_left;
 	int i;
 	int received_data_index;
-#ifdef CONFIG_USB_NOTIFY_PROC_LOG
-	int event;
-#endif
 
 	usbpd_data = data;
 	if (!usbpd_data)
@@ -1636,13 +1557,8 @@ static int max77705_send_sec_unstructured_long_vdm_message(void *data, void *buf
 		time_left =
 			wait_for_completion_interruptible_timeout(&usbpd_data->uvdm_longpacket_out_wait,
 							  msecs_to_jiffies(SAMSUNGUVDM_WAIT_MS));
-		if (time_left <= 0) {
-#ifdef CONFIG_USB_NOTIFY_PROC_LOG
-			event = NOTIFY_EXTRA_UVDM_TIMEOUT;
-			store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
-#endif
+		if (time_left <= 0)
 			return -ETIME;
-		}
 
 		if (usbpd_data->uvdm_error)
 			return usbpd_data->uvdm_error;
@@ -1849,9 +1765,6 @@ int max77705_sec_uvdm_in_request_message(void *data)
 	int time_left = 0;
 	int cal_checksum = 0;
 	int i = 0;
-#ifdef CONFIG_USB_NOTIFY_PROC_LOG
-	int event;
-#endif
 
 	usbpd_data = g_usbc_data;
 	if (!usbpd_data)
@@ -1887,10 +1800,6 @@ int max77705_sec_uvdm_in_request_message(void *data)
 
 		if (time_left <= 0) {
 			msg_maxim("timeout");
-#ifdef CONFIG_USB_NOTIFY_PROC_LOG
-			event = NOTIFY_EXTRA_UVDM_TIMEOUT;
-			store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
-#endif
 			return -ETIME;
 		}
 		if (usbpd_data->uvdm_error)
@@ -1963,10 +1872,6 @@ int max77705_sec_uvdm_in_request_message(void *data)
 				msecs_to_jiffies(SAMSUNGUVDM_WAIT_MS));
 	if (time_left <= 0) {
 		msg_maxim("last in request timeout");
-#ifdef CONFIG_USB_NOTIFY_PROC_LOG
-		event = NOTIFY_EXTRA_UVDM_TIMEOUT;
-		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
-#endif
 		return -ETIME;
 	}
 	if (usbpd_data->uvdm_error)

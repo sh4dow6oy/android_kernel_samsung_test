@@ -19,6 +19,7 @@
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
 #endif /* CONFIG_COMPAT */
+
 #include <linux/ccic/max77705_debug.h>
 
 #define DEBUG_MXIM
@@ -426,7 +427,7 @@ void mxim_debug_set_i2c_client(struct i2c_client *client)
 {
 	if (mxim_pdev) {
 		mxim_pdev->client = client;
-		msg_maxim("Set i2c_client. %pK", mxim_pdev->client);
+		msg_maxim("Set i2c_client. %p", mxim_pdev->client);
 	} else
 		msg_maxim("Failed to set i2c_client.");
 }
@@ -457,11 +458,7 @@ void mxim_debug_exit(void)
 {
 	if (mxim_pdev) {
 		mutex_destroy(&mxim_pdev->lock);
-		sysfs_remove_group(&mxim_pdev->dev->kobj, &mxim_debug_attr_grp);
-		device_destroy(mxim_pdev->class, 1);
-		class_destroy(mxim_pdev->class);
 		kfree(mxim_pdev);
-		mxim_pdev = NULL;
 	}
 
 	misc_deregister(&mxim_debug_miscdev);

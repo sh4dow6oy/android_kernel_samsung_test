@@ -1,6 +1,7 @@
 /*
  *
- * Copyright (C) 2017-2019 Samsung Electronics
+ * Copyright (C) 2017 Samsung Electronics Inc.
+ * Author: wookwang.lee / gs.khurana@samsung.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,7 +14,8 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
  */
 
@@ -25,11 +27,11 @@
 #include <linux/ccic/ccic_core.h>
 
 static ssize_t ccic_sysfs_show_property(struct device *dev,
-				struct device_attribute *attr, char *buf);
+				       struct device_attribute *attr, char *buf);
 
 static ssize_t ccic_sysfs_store_property(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count);
+					struct device_attribute *attr,
+					const char *buf, size_t count);
 
 #define CCIC_SYSFS_ATTR(_name)				\
 {							\
@@ -60,20 +62,18 @@ static struct device_attribute ccic_attributes[] = {
 	CCIC_SYSFS_ATTR(ram_test),
 	CCIC_SYSFS_ATTR(sbu_adc),
 	CCIC_SYSFS_ATTR(vsafe0v_status),
-	CCIC_SYSFS_ATTR(ovp_ic_shutdown),
-	CCIC_SYSFS_ATTR(hmd_power),
 };
 
 static ssize_t ccic_sysfs_show_property(struct device *dev,
-				struct device_attribute *attr, char *buf)
+				       struct device_attribute *attr, char *buf)
 {
+
 	ssize_t ret = 0;
 	pccic_data_t pccic_data = dev_get_drvdata(dev);
-	pccic_sysfs_property_t pccic_sysfs =
-			(pccic_sysfs_property_t)pccic_data->ccic_syfs_prop;
+	pccic_sysfs_property_t pccic_sysfs = (pccic_sysfs_property_t)pccic_data->ccic_syfs_prop;
 	const ptrdiff_t off = attr - ccic_attributes;
 
-	if (off == CCIC_SYSFS_PROP_CHIP_NAME) {
+	if (CCIC_SYSFS_PROP_CHIP_NAME == off) {
 		return snprintf(buf, PAGE_SIZE, "%s\n",
 					pccic_data->name);
 	} else {
@@ -99,8 +99,7 @@ static ssize_t ccic_sysfs_store_property(struct device *dev,
 {
 	ssize_t ret = 0;
 	pccic_data_t pccic_data = dev_get_drvdata(dev);
-	pccic_sysfs_property_t pccic_sysfs =
-			(pccic_sysfs_property_t)pccic_data->ccic_syfs_prop;
+	pccic_sysfs_property_t pccic_sysfs = (pccic_sysfs_property_t)pccic_data->ccic_syfs_prop;
 	const ptrdiff_t off = attr - ccic_attributes;
 
 	ret = pccic_sysfs->set_property(pccic_data, off, buf, count);
@@ -119,12 +118,11 @@ static ssize_t ccic_sysfs_store_property(struct device *dev,
 }
 
 static umode_t ccic_sysfs_attr_is_visible(struct kobject *kobj,
-					struct attribute *attr, int attrno)
+					 struct attribute *attr, int attrno)
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
 	pccic_data_t pccic_data = dev_get_drvdata(dev);
-	pccic_sysfs_property_t pccic_sysfs =
-			(pccic_sysfs_property_t)pccic_data->ccic_syfs_prop;
+	pccic_sysfs_property_t pccic_sysfs = (pccic_sysfs_property_t)pccic_data->ccic_syfs_prop;
 	umode_t mode = S_IRUSR | S_IRGRP | S_IROTH;
 	int i;
 
@@ -133,11 +131,14 @@ static umode_t ccic_sysfs_attr_is_visible(struct kobject *kobj,
 
 		if (property == attrno) {
 			if (pccic_sysfs->property_is_writeable &&
-			    pccic_sysfs->property_is_writeable(pccic_data, property) > 0)
+			    pccic_sysfs->property_is_writeable(pccic_data, property)
+			    > 0)
 				mode |= S_IWUSR;
 			if (pccic_sysfs->property_is_writeonly &&
-			    pccic_sysfs->property_is_writeonly(pccic_data, property) > 0)
-				mode = S_IWUSR;
+			    pccic_sysfs->property_is_writeonly(pccic_data, property)
+			    > 0)
+				mode = S_IWUSR | S_IWGRP;
+
 			return mode;
 		}
 	}
@@ -159,3 +160,4 @@ void ccic_sysfs_init_attrs(void)
 	for (i = 0; i < ARRAY_SIZE(ccic_attributes); i++)
 		__ccic_sysfs_attrs[i] = &ccic_attributes[i].attr;
 }
+
