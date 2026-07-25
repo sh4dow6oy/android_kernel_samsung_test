@@ -303,4 +303,3 @@ config SEC_DEBUG_TEST
 	depends on SEC_KUNIT
 	help
 	  TODO: Describe config fully.
-
