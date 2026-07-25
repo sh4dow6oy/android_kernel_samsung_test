@@ -1,92 +1,80 @@
-#!/bin/sh
+#!/bin/bash
 
-build_kernel() {
-    echo "-----------------------------------------------"
-    echo "Beginning kernel compilation..."
-    echo "-----------------------------------------------"
+# 1. Import Proton Clang (Toolchain LLVM modern și complet)
+git clone --depth=1 https://github.com/kdrag0n/proton-clang.git toolchain/proton-clang
+# Setting 
+export ANDROID_BUILD_TOP=$(pwd)
 
-    export ARCH=arm64
-    mkdir out
+# OEM & Architecture Setting
+export ARCH=arm64
+export SUBARCH=arm64
 
-    export PATH=$(pwd)/llvm-21/bin:$PATH
+# Definirea căilor către Proton Clang
+PROTON_BIN=$(pwd)/toolchain/proton-clang/bin
+# Setăm compilatorul principal (Clang) din Proton
+KERNEL_LLVM_BIN=$PROTON_BIN/clang
+BUILD_CROSS_COMPILE=$PROTON_BIN/aarch64-linux-gnu-
+BUILD_CROSS_COMPILE_ARM32=$PROTON_BIN/arm-linux-gnueabi-
+CLANG_TRIPLE=aarch64-linux-gnu-
 
-    BUILD_VAR="-j$(nproc) -C $(pwd) O=$(pwd)/out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1"
+# Setări mediu pentru Device Tree / Overlays
+export DTC_EXT=$(pwd)/tools/dtc
+export CONFIG_BUILD_ARM64_DT_OVERLAY=y
+# Cooking Kernel Source
+mkdir -p out
+# Setări globale de mediu pentru ca LLVM să fie recunoscut nativ în sursele Qualcomm/Samsung
+export LLVM=1
+export LLVM_IAS=1
 
-    cat arch/arm64/configs/vendor/kona-sec-perf_defconfig arch/arm64/configs/vendor/samsung/r8q.config > arch/arm64/configs/temp_defconfig
+# TACTICA SALVATOARE: Creăm un folder local de legături (symlinks) și îl punem în PATH.
+mkdir -p $(pwd)/tools/bin-links
 
-    echo "
-    CONFIG_THINLTO=y
-    # CONFIG_LTO_NONE is not set
-    CONFIG_LTO_CLANG=y
-    " >> arch/arm64/configs/temp_defconfig
+ln -sf $PROTON_BIN/llvm-ar $(pwd)/tools/bin-links/llvm-ar
+ln -sf $PROTON_BIN/llvm-nm $(pwd)/tools/bin-links/llvm-nm
+ln -sf $PROTON_BIN/llvm-objcopy $(pwd)/tools/bin-links/llvm-objcopy
+ln -sf $PROTON_BIN/llvm-objdump $(pwd)/tools/bin-links/llvm-objdump
+ln -sf $PROTON_BIN/llvm-strip $(pwd)/tools/bin-links/llvm-strip
 
-    make $BUILD_VAR temp_defconfig
-    rm arch/arm64/configs/temp_defconfig
-}
+export PATH="$(pwd)/tools/bin-links:$PATH"
 
-build_dtb() {
-    echo "-----------------------------------------------"
-    echo "Building dtb..."
-    echo "-----------------------------------------------"
-    make $BUILD_VAR
-    make $BUILD_VAR dtbs
 
-    cat "$(pwd)/out/arch/arm64/boot/dts/vendor/qcom/kona.dtb" \
-        "$(pwd)/out/arch/arm64/boot/dts/vendor/qcom/kona-v2.dtb" \
-        "$(pwd)/out/arch/arm64/boot/dts/vendor/qcom/kona-v2.1.dtb" \
-        > "$(pwd)/out/arch/arm64/boot/dts/dtb"
-}
+MAKE_ARGS=(
+    -j$(nproc --all) \
+    ARCH=arm64 \
+    CROSS_COMPILE="$BUILD_CROSS_COMPILE" \
+    CROSS_COMPILE_ARM32="$BUILD_CROSS_COMPILE_ARM32" \
+    CC="$KERNEL_LLVM_BIN" \
+    CLANG_TRIPLE="$CLANG_TRIPLE" \
+    LD="$PROTON_BIN/ld.lld" \
+    AR="$PROTON_BIN/llvm-ar" \
+    NM="$PROTON_BIN/llvm-nm" \
+    OBJCOPY="$PROTON_BIN/llvm-objcopy" \
+    OBJDUMP="$PROTON_BIN/llvm-objdump" \
+    STRIP="$PROTON_BIN/llvm-strip" \
+    HOSTCC=gcc \
+    HOSTCXX=g++ \
+    DTC=dtc \
+    O=out \
+)
 
-build_dtbo() {
-    echo "-----------------------------------------------"
-    echo "Building dtbo.img..."
-    echo "-----------------------------------------------"
-    DTBO_FILES=$(find $(pwd)/out/arch/arm64/boot/dts/samsung/r8q -name kona-sec-r8q-*.dtbo)
-    $(pwd)/tools/mkdtimg create $(pwd)/out/dtbo.img --page_size=4096 ${DTBO_FILES}
 
-    mv $(pwd)/out/dtbo.img dtbo.img
-}
+# Fix pentru erorile fatale de Git "ambiguous argument" din driverul Wi-Fi Qualcomm (qcacld-3.0)
+echo "=== Configurare și păcălire Git pentru driverul Wi-Fi ==="
+git config --global user.name "GitHub Action"
+git config --global user.email "action@github.com"
+git checkout -b temp-branch 2>/dev/null || true
+git tag -a f35368d83 -m "Fix target revision for qcacld" 2>/dev/null || true
 
-build_boot() {
-    echo "-----------------------------------------------"
-    echo "Building boot.img..."
-    echo "-----------------------------------------------"
-    MKBOOTIMG="$(pwd)/mkbootimg/mkbootimg.py"
-    OUT_KERNEL="$(pwd)/out/arch/arm64/boot/Image"
-    DTB_OUT="$(pwd)/out/arch/arm64/boot/dts/dtb"
-    CMDLINE="console=null androidboot.hardware=qcom androidboot.memcg=1 lpm_levels.sleep_disabled=1 video=vfb:640x400,bpp=32,memsize=3072000 msm_rtb.filter=0x237 service_locator.enable=1 androidboot.usbcontroller=a600000.dwc3 swiotlb=2048 printk.devkmsg=on firmware_class.path=/vendor/firmware_mnt/image loop.max_part=7"
-    BASE="0x00000000"
-    KOFFSET="0x00008000"
-    ROFFSET="0x02000000"
-    SECOFFSET="0x00000000"
-    DTBOFFSET="0x01f00000"
-    TAGSOFFSET="0x01e00000"
-    BOARD="SRPUB26A012"
-    PAGESZ="4096"
-    RAMDISK="$(pwd)/boot/ramdisk"
-    MONTH="$(date +%Y-%m)"
 
-    $MKBOOTIMG \
-        --header_version 2 \
-        --kernel "$OUT_KERNEL" \
-        --ramdisk "$RAMDISK" \
-        --dtb "$DTB_OUT" \
-        --cmdline "$CMDLINE" \
-        --header_version 2 \
-        --base "$BASE" \
-        --kernel_offset "$KOFFSET" \
-        --ramdisk_offset "$ROFFSET" \
-        --second_offset "$SECOFFSET" \
-        --dtb_offset "$DTBOFFSET" \
-        --tags_offset "$TAGSOFFSET" \
-        --board "$BOARD" \
-        --pagesize "$PAGESZ" \
-        --os_version 16.0.0 \
-        --os_patch_level "$MONTH" \
-        --output boot.img
-}
+# Pasul 1: Generarea fișierului .config folosind configurația ta curată pentru R5Q
+echo "=== Pasul 1: Generare configurație exclusivă sm8150_sec_r5q_eur_open_defconfig ==="
+make "${MAKE_ARGS[@]}" sm8150_sec_r5q_eur_open_defconfig || exit 1
 
-build_kernel
-build_dtb
-build_dtbo
-build_boot
+# Pasul 2: Sincronizarea regulilor de Kconfig în siguranță (fără merge_config)
+echo "=== Pasul 2: Sincronizare și fixare Kconfig ==="
+make "${MAKE_ARGS[@]}" olddefconfig || exit 1
+
+
+# Pasul 3: Compilarea imaginii finale
+echo "=== Pasul 3: Compilare Kernel (Image.gz-dtb) ==="
+make "${MAKE_ARGS[@]}" Image.gz-dtb dtbs || exit 1
