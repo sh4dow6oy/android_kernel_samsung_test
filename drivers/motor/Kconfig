@@ -75,6 +75,16 @@ config MOTOR_DRV_ISA1000A
 	help
 	  Say Y to enable MOTOR_CS40L2X
 
+config MOTOR_S2MU106
+	tristate "s2mu106 haptic driver"
+	default n
+	depends on I2C
+	help
+	 Say Y to include support for System LSI s2mu106
+	 Haptic driver.
+	 The Haptic Motor driver support both ERM and
+	 LRA type actuators.
+
 config 1030LRA_MOTOR
 	tristate "feature to distinguish haptic engine support"
 	default n
