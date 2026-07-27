@@ -1,6 +1,7 @@
 /*
  *
- * Copyright (C) 2017-2019 Samsung Electronics
+ * Copyright (C) 2017 Samsung Electronics Inc.
+ * Author: wookwang.lee / gs.khurana@samsung.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,6 +18,12 @@
 #define __CCIC_SYSFS__
 
 extern const struct attribute_group ccic_sysfs_group;
+
+#define CCIC_MAX_FW_PATH	64
+#define CCIC_DEFAULT_FW		"usbpd/s2mm005.bin"
+#define CCIC_DEFAULT_FULL_FW		"usbpd/USB_PD_FULL_DRIVER.bin"
+#define CCIC_DEFAULT_UMS_FW			"/sdcard/Firmware/usbpd/s2mm005.bin"
+#define CCIC_DEFAULT_FULL_UMS_FW	"/sdcard/Firmware/usbpd/USB_PD_FULL_DRIVER.bin"
 
 enum {
 	BUILT_IN = 0,
@@ -46,8 +53,6 @@ enum ccic_sysfs_property {
 	CCIC_SYSFS_PROP_RAM_TEST,
 	CCIC_SYSFS_PROP_SBU_ADC,
 	CCIC_SYSFS_PROP_VSAFE0V_STATUS,
-	CCIC_SYSFS_PROP_OVP_IC_SHUTDOWN,
-	CCIC_SYSFS_PROP_HMD_POWER,
 	CCIC_SYSFS_PROP_MAX_COUNT,
 };
 struct _ccic_data_t;
@@ -70,4 +75,3 @@ typedef struct _ccic_sysfs_property_t {
 
 void ccic_sysfs_init_attrs(void);
 #endif
-

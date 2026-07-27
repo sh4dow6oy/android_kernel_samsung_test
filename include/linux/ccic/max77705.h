@@ -167,6 +167,7 @@
 #define BIT_ConnStat			BIT(1)
 #define BIT_Altmode				BIT(0)
 
+
 /*
  * REG_PD_STATUS0
  */
@@ -227,7 +228,6 @@ enum max77705_vcon_role {
 #define FW_VERIFY_DATA_SIZE 3
 
 #define FW_VERIFY_TRY_COUNT 10
-#define FW_SECURE_MODE_TRY_COUNT 10
 
 #define FW_WAIT_TIMEOUT			(1000 * 5) /* 5 sec */
 #define I2C_SMBUS_BLOCK_HALF	(I2C_SMBUS_BLOCK_MAX / 2)
@@ -397,9 +397,11 @@ enum max77705_usbc_SYSMsg {
 	SYSMSG_CCx_5V_SHORT = 0x61,
 	SYSMSG_SBUx_GND_SHORT = 0x62,
 	SYSMSG_SBUx_5V_SHORT = 0x63,
-#ifdef MAX77705_GRL_ENABLE
+
+#ifdef CONFIG_MAX77705_GRL_ENABLE
 	SYSMSG_SET_GRL = 0x64,
 #endif
+
 	SYSMSG_PD_CCx_5V_SHORT = 0x65,
 	SYSMSG_PD_SBUx_5V_SHORT = 0x66,
 	SYSMSG_PD_SHORT_NONE = 0x67,
@@ -454,7 +456,6 @@ enum max77705_pdmsg {
 
 	Sink_PD_Disabled = 0x20,
 	Source_PD_Disabled = 0x21,
-	Current_Cable_Connected = 0x22,
 
 	Get_Source_Capabilities_Extended_Received = 0x30,
 	Get_Status_Received = 0x31,
@@ -517,6 +518,7 @@ enum max77705_connstat {
 #define OPCODE_PUSH_SEQ 0x4
 #define OPCODE_UPDATE_SEQ 0x5
 
+
 typedef enum {
 	OPCODE_BCCTRL1_R = 0x01,
 	OPCODE_BCCTRL1_W,
@@ -549,7 +551,6 @@ typedef enum {
 	OPCODE_AFC_HV_W = 0x20,
 	OPCODE_AFC_RESULT_R,
 	OPCODE_QC2P0_SET = 0x22,
-	OPCODE_SET_SNKCAP = 0x2E,
 	OPCODE_READ_SBU = 0x25,
 	OPCODE_CURRENT_SRCCAP = 0x30,
 	OPCODE_GET_SRCCAP = 0x31,
@@ -575,9 +576,8 @@ typedef enum {
 	OPCODE_SET_ALTERNATEMODE = 0x55,
 	OPCODE_SAMSUNG_FW_AUTOIBUS = 0x57,
 	OPCODE_READ_SELFTEST = 0x59,
-	OPCODE_SAMSUNG_GPIO5_CONTROL = 0x5B,
 	OPCODE_SAMSUNG_READ_MESSAGE = 0x5D,
-#ifdef MAX77705_GRL_ENABLE
+#ifdef CONFIG_MAX77705_GRL_ENABLE
 	OPCODE_GRL_COMMAND = 0x70,
 #else
 	OPCODE_FW_OPCODE_CLEAR = 0x70,
