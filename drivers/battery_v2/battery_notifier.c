@@ -4,6 +4,7 @@
 #include <linux/battery/battery_notifier.h>
 #include <linux/sec_class.h>
 
+#define DEBUG
 #define SET_BATTERY_NOTIFIER_BLOCK(nb, fn, dev) do {	\
 		(nb)->notifier_call = (fn);		\
 		(nb)->priority = (dev);			\
@@ -23,7 +24,7 @@ int charger_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
 {
 	int ret = 0;
 
-	pr_debug("%s: listener=%d register\n", __func__, listener);
+	pr_info("%s: listener=%d register\n", __func__, listener);
 
 	/* Check if CHARGER Notifier is ready. */
 	if (!charger_device) {
@@ -48,7 +49,7 @@ int charger_notifier_unregister(struct notifier_block *nb)
 {
 	int ret = 0;
 
-	pr_debug("%s: listener=%d unregister\n", __func__, nb->priority);
+	pr_info("%s: listener=%d unregister\n", __func__, nb->priority);
 
 	ret = blocking_notifier_chain_unregister(&(charger_notifier.notifier_call_chain), nb);
 	if (ret < 0)
@@ -64,7 +65,7 @@ int pdic_notifier_register(struct notifier_block *nb, notifier_fn_t notifier,
 {
 	int ret = 0;
 
-	pr_debug("%s: listener=%d register\n", __func__, listener);
+	pr_info("%s: listener=%d register\n", __func__, listener);
 
 	/* Check if CHARGER Notifier is ready. */
 	if (!pdic_device) {
@@ -89,7 +90,7 @@ int pdic_notifier_unregister(struct notifier_block *nb)
 {
 	int ret = 0;
 
-	pr_debug("%s: listener=%d unregister\n", __func__, nb->priority);
+	pr_info("%s: listener=%d unregister\n", __func__, nb->priority);
 
 	ret = blocking_notifier_chain_unregister(&(pdic_notifier.notifier_call_chain), nb);
 	if (ret < 0)
@@ -114,7 +115,7 @@ static int battery_notifier_notify(int type)
 				pdic_notifier.event, &(pdic_notifier));
 		break;
 	default:
-		pr_debug("%s: notify status unknown(0x%x)\n", __func__, ret);
+		pr_info("%s: notify status unknown(0x%x)\n", __func__, ret);
 		break;
 	}
 
@@ -125,10 +126,10 @@ static int battery_notifier_notify(int type)
 		break;
 	case NOTIFY_DONE:
 	case NOTIFY_OK:
-		pr_debug("%s: notify done(0x%x)\n", __func__, ret);
+		pr_info("%s: notify done(0x%x)\n", __func__, ret);
 		break;
 	default:
-		pr_debug("%s: notify status unknown(0x%x)\n", __func__, ret);
+		pr_info("%s: notify status unknown(0x%x)\n", __func__, ret);
 		break;
 	}
 
@@ -150,7 +151,7 @@ static void charger_notifier_set_property(struct charger_notifier_struct * value
 void charger_notifier_call(struct charger_notifier_struct *value)
 {
 	/* charger's event broadcast */
-	pr_debug("%s: CHARGER_NOTIFY_EVENT :%d\n", __func__, value->event);
+	pr_info("%s: CHARGER_NOTIFY_EVENT :%d\n", __func__, value->event);
 	charger_notifier_set_property(value);
 	battery_notifier_notify(CHARGER_NOTIFY);
 }
@@ -178,10 +179,10 @@ int battery_notifier_init(void)
 {
 	int ret = 0;
 
-	pr_debug("%s\n", __func__);
+	pr_info("%s\n", __func__);
 
-	charger_device = sec_device_create(0, NULL, "charger_notifier");
-	pdic_device = sec_device_create(0, NULL, "pdic_notifier");
+	charger_device = sec_device_create(NULL, "charger_notifier");
+	pdic_device = sec_device_create(NULL, "pdic_notifier");
 	if (IS_ERR(charger_device)) {
 		pr_err("%s Failed to create device(charer_notifier)!\n", __func__);
 		ret = -ENODEV;
@@ -200,4 +201,3 @@ out:
 	return ret;
 }
 device_initcall(battery_notifier_init);
-
